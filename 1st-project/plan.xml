@@ -1,0 +1,259 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plan>
+  <title>Vite PWA with localStorage Form Submission</title>
+  <description>
+    Create a Progressive Web App using Vite that includes an input form
+    which persists data to localStorage for offline-capable storage.
+  </description>
+
+  <phase name="Project Setup">
+    <step order="1">
+      <action>Initialize Vite project with React and TypeScript</action>
+      <command>npm create vite@latest . -- --template react-ts</command>
+      <notes>Use React with TypeScript for type safety and better DX</notes>
+    </step>
+    <step order="2">
+      <action>Install dependencies</action>
+      <command>npm install</command>
+    </step>
+    <step order="3">
+      <action>Install PWA plugin for Vite</action>
+      <command>npm install -D vite-plugin-pwa</command>
+    </step>
+  </phase>
+
+  <phase name="PWA Configuration">
+    <step order="1">
+      <action>Configure vite.config.ts with PWA plugin</action>
+      <file>vite.config.ts</file>
+      <details>
+        - Import VitePWA from 'vite-plugin-pwa'
+        - Add VitePWA plugin with manifest configuration
+        - Set registerType to 'autoUpdate'
+        - Configure workbox for caching strategies
+        - Define manifest with app name, icons, theme colors
+      </details>
+    </step>
+    <step order="2">
+      <action>Create PWA icons</action>
+      <details>
+        - Create 192x192 icon (pwa-192x192.png)
+        - Create 512x512 icon (pwa-512x512.png)
+        - Place in public/ directory
+      </details>
+    </step>
+    <step order="3">
+      <action>Update index.html with PWA meta tags</action>
+      <file>index.html</file>
+      <details>
+        - Add theme-color meta tag
+        - Add apple-mobile-web-app-capable meta tag
+        - Add viewport meta tag for mobile
+      </details>
+    </step>
+  </phase>
+
+  <phase name="LocalStorage Service">
+    <step order="1">
+      <action>Create localStorage service layer</action>
+      <file>src/services/storage.ts</file>
+      <details>
+        - Define TypeScript interface for form data
+        - Create function to save form submission to localStorage
+        - Create function to retrieve all submissions
+        - Create function to delete a submission
+        - Create function to clear all submissions
+        - Generate unique IDs for each submission (use crypto.randomUUID or Date.now)
+        - Add timestamp to each submission
+      </details>
+      <example>
+        interface FormSubmission {
+          id: string;
+          name: string;
+          email: string;
+          message: string;
+          createdAt: string;
+        }
+
+        const STORAGE_KEY = 'form_submissions';
+
+        export function saveSubmission(data: Omit&lt;FormSubmission, 'id' | 'createdAt'&gt;): FormSubmission
+        export function getSubmissions(): FormSubmission[]
+        export function deleteSubmission(id: string): void
+        export function clearSubmissions(): void
+      </example>
+    </step>
+  </phase>
+
+  <phase name="Form Component">
+    <step order="1">
+      <action>Create form component</action>
+      <file>src/components/InputForm.tsx</file>
+      <details>
+        - Create controlled form with React state
+        - Include input fields: name, email, message
+        - Add form validation (required fields, email format)
+        - Handle submit event
+        - Show success message after submission
+        - Clear form after successful submission
+      </details>
+    </step>
+    <step order="2">
+      <action>Create form hook for logic separation</action>
+      <file>src/hooks/useFormSubmit.ts</file>
+      <details>
+        - Handle form state management
+        - Handle validation logic
+        - Call localStorage service on submit
+        - Return form state, handlers, and validation errors
+      </details>
+    </step>
+    <step order="3">
+      <action>Style the form</action>
+      <file>src/components/InputForm.css</file>
+      <details>
+        - Responsive design for mobile and desktop
+        - Clean, accessible form styling
+        - Error and success message styles
+        - Focus states for accessibility
+      </details>
+    </step>
+  </phase>
+
+  <phase name="Submissions List">
+    <step order="1">
+      <action>Create submissions list component</action>
+      <file>src/components/SubmissionsList.tsx</file>
+      <details>
+        - Display all saved submissions from localStorage
+        - Show submission details (name, email, message, date)
+        - Add delete button for each submission
+        - Add clear all button
+        - Show empty state when no submissions
+      </details>
+    </step>
+    <step order="2">
+      <action>Style the submissions list</action>
+      <file>src/components/SubmissionsList.css</file>
+      <details>
+        - Card-based layout for submissions
+        - Responsive grid/list view
+        - Delete button styling
+        - Empty state styling
+      </details>
+    </step>
+  </phase>
+
+  <phase name="App Integration">
+    <step order="1">
+      <action>Update App.tsx</action>
+      <file>src/App.tsx</file>
+      <details>
+        - Import and render InputForm component
+        - Import and render SubmissionsList component
+        - Add app header/branding
+        - Use state to trigger list refresh after new submission
+      </details>
+    </step>
+    <step order="2">
+      <action>Add offline indicator</action>
+      <file>src/hooks/useOnlineStatus.ts</file>
+      <details>
+        - Detect online/offline status
+        - Show user-friendly indicator when offline
+        - Form works fully offline with localStorage
+      </details>
+    </step>
+    <step order="3">
+      <action>Update global styles</action>
+      <file>src/index.css</file>
+      <details>
+        - Reset/normalize CSS
+        - Set base font and colors
+        - Mobile-first responsive design
+      </details>
+    </step>
+  </phase>
+
+  <phase name="Testing and Build">
+    <step order="1">
+      <action>Test PWA functionality</action>
+      <command>npm run build && npm run preview</command>
+      <details>
+        - Verify service worker registration
+        - Test offline functionality
+        - Check manifest is loaded correctly
+        - Validate installability
+      </details>
+    </step>
+    <step order="2">
+      <action>Test form and storage</action>
+      <details>
+        - Submit form with valid data
+        - Verify data appears in submissions list
+        - Verify data persists after page refresh
+        - Test delete functionality
+        - Test clear all functionality
+        - Test validation messages
+        - Test offline submission works
+      </details>
+    </step>
+  </phase>
+
+  <file_structure>
+    <directory name="src">
+      <directory name="components">
+        <file>InputForm.tsx</file>
+        <file>InputForm.css</file>
+        <file>SubmissionsList.tsx</file>
+        <file>SubmissionsList.css</file>
+      </directory>
+      <directory name="services">
+        <file>storage.ts</file>
+      </directory>
+      <directory name="hooks">
+        <file>useFormSubmit.ts</file>
+        <file>useOnlineStatus.ts</file>
+      </directory>
+      <file>App.tsx</file>
+      <file>App.css</file>
+      <file>main.tsx</file>
+      <file>index.css</file>
+      <file>vite-env.d.ts</file>
+    </directory>
+    <directory name="public">
+      <file>pwa-192x192.png</file>
+      <file>pwa-512x512.png</file>
+    </directory>
+    <file>index.html</file>
+    <file>vite.config.ts</file>
+    <file>tsconfig.json</file>
+    <file>package.json</file>
+  </file_structure>
+
+  <benefits>
+    <item>No backend or cloud services required</item>
+    <item>Works completely offline</item>
+    <item>Data persists across browser sessions</item>
+    <item>No API keys or credentials to manage</item>
+    <item>Simple to deploy as static site</item>
+    <item>Fast - no network latency for storage operations</item>
+  </benefits>
+
+  <limitations>
+    <item>Data is stored per-browser, not synced across devices</item>
+    <item>Storage limit ~5-10MB depending on browser</item>
+    <item>User can clear data via browser settings</item>
+    <item>No server-side validation or processing</item>
+  </limitations>
+
+  <notes>
+    <note priority="medium">
+      Consider using IndexedDB instead of localStorage for larger datasets
+      or more complex querying needs.
+    </note>
+    <note priority="low">
+      Add export/import functionality to allow users to backup their data.
+    </note>
+  </notes>
+</plan>
