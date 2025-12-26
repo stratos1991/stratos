@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <plan>
-  <title>Vite PWA with localStorage Form Submission</title>
+  <title>Vite PWA with React Hook Form, MUI, and localStorage</title>
   <description>
-    Create a Progressive Web App using Vite that includes an input form
-    which persists data to localStorage for offline-capable storage.
+    Create a Progressive Web App using Vite, React, TypeScript, Material-UI (MUI),
+    and react-hook-form that includes an input form which persists data to
+    localStorage for offline-capable storage. Features a modern, responsive UI
+    with professional Material Design components.
   </description>
 
   <phase name="Project Setup">
@@ -19,6 +21,14 @@
     <step order="3">
       <action>Install PWA plugin for Vite</action>
       <command>npm install -D vite-plugin-pwa</command>
+    </step>
+    <step order="4">
+      <action>Install Material-UI (MUI) dependencies</action>
+      <command>npm install @mui/material @emotion/react @emotion/styled @mui/icons-material</command>
+    </step>
+    <step order="5">
+      <action>Install react-hook-form</action>
+      <command>npm install react-hook-form</command>
     </step>
   </phase>
 
@@ -63,7 +73,7 @@
         - Create function to retrieve all submissions
         - Create function to delete a submission
         - Create function to clear all submissions
-        - Generate unique IDs for each submission (use crypto.randomUUID or Date.now)
+        - Generate unique IDs for each submission (use Date.now)
         - Add timestamp to each submission
       </details>
       <example>
@@ -85,92 +95,109 @@
     </step>
   </phase>
 
-  <phase name="Form Component">
+  <phase name="MUI Theme Setup">
     <step order="1">
-      <action>Create form component</action>
-      <file>src/components/InputForm.tsx</file>
+      <action>Create MUI theme configuration</action>
+      <file>src/theme/theme.ts</file>
       <details>
-        - Create controlled form with React state
-        - Include input fields: name, email, message
-        - Add form validation (required fields, email format)
-        - Handle submit event
-        - Show success message after submission
-        - Clear form after successful submission
+        - Import createTheme from @mui/material
+        - Define custom theme with colors, typography
+        - Export theme for use in main.tsx
       </details>
     </step>
     <step order="2">
-      <action>Create form hook for logic separation</action>
-      <file>src/hooks/useFormSubmit.ts</file>
+      <action>Wrap app with ThemeProvider</action>
+      <file>src/main.tsx</file>
       <details>
-        - Handle form state management
-        - Handle validation logic
-        - Call localStorage service on submit
-        - Return form state, handlers, and validation errors
+        - Import ThemeProvider and CssBaseline from MUI
+        - Import custom theme
+        - Wrap App component with ThemeProvider
+        - Add CssBaseline for consistent baseline styles
       </details>
     </step>
-    <step order="3">
-      <action>Style the form</action>
-      <file>src/components/InputForm.css</file>
+  </phase>
+
+  <phase name="Form Component">
+    <step order="1">
+      <action>Create form component with react-hook-form and MUI</action>
+      <file>src/components/InputForm.tsx</file>
       <details>
-        - Responsive design for mobile and desktop
-        - Clean, accessible form styling
-        - Error and success message styles
-        - Focus states for accessibility
+        - Import useForm from react-hook-form
+        - Import MUI components: TextField, Button, Box, Alert, Paper
+        - Use useForm hook with TypeScript types
+        - Define validation rules using react-hook-form
+        - Include input fields: name (required), email (required + pattern), message (required)
+        - Use MUI TextField with error states from react-hook-form
+        - Use MUI Button for submit
+        - Show MUI Alert for success message after submission
+        - Reset form using react-hook-form reset() after successful submission
+      </details>
+      <example>
+        import { useForm } from 'react-hook-form';
+        import { TextField, Button, Box, Alert, Paper } from '@mui/material';
+
+        interface FormData {
+          name: string;
+          email: string;
+          message: string;
+        }
+
+        const { register, handleSubmit, formState: { errors }, reset } = useForm&lt;FormData&gt;();
+      </example>
+    </step>
+    <step order="2">
+      <action>Create form submission hook</action>
+      <file>src/hooks/useFormSubmit.ts</file>
+      <details>
+        - Handle submission logic
+        - Call localStorage service on submit
+        - Manage success state
+        - Return submit handler and success state
       </details>
     </step>
   </phase>
 
   <phase name="Submissions List">
     <step order="1">
-      <action>Create submissions list component</action>
+      <action>Create submissions list component with MUI</action>
       <file>src/components/SubmissionsList.tsx</file>
       <details>
+        - Import MUI components: Card, CardContent, Typography, IconButton, Button, Grid, Box
+        - Import DeleteIcon from @mui/icons-material
         - Display all saved submissions from localStorage
-        - Show submission details (name, email, message, date)
-        - Add delete button for each submission
-        - Add clear all button
-        - Show empty state when no submissions
-      </details>
-    </step>
-    <step order="2">
-      <action>Style the submissions list</action>
-      <file>src/components/SubmissionsList.css</file>
-      <details>
-        - Card-based layout for submissions
-        - Responsive grid/list view
-        - Delete button styling
-        - Empty state styling
+        - Use MUI Card for each submission
+        - Use MUI Grid for responsive layout
+        - Show submission details using MUI Typography
+        - Add MUI IconButton with DeleteIcon for each submission
+        - Add MUI Button for clear all functionality
+        - Show empty state using MUI Typography when no submissions
+        - Format dates with JavaScript Intl.DateTimeFormat
       </details>
     </step>
   </phase>
 
   <phase name="App Integration">
     <step order="1">
-      <action>Update App.tsx</action>
+      <action>Update App.tsx with MUI layout</action>
       <file>src/App.tsx</file>
       <details>
+        - Import MUI components: Container, AppBar, Toolbar, Typography, Box, Chip
         - Import and render InputForm component
         - Import and render SubmissionsList component
-        - Add app header/branding
+        - Create MUI AppBar with app title
+        - Use MUI Container for main content layout
         - Use state to trigger list refresh after new submission
+        - Add offline indicator using MUI Chip
       </details>
     </step>
     <step order="2">
-      <action>Add offline indicator</action>
+      <action>Add offline indicator hook</action>
       <file>src/hooks/useOnlineStatus.ts</file>
       <details>
-        - Detect online/offline status
-        - Show user-friendly indicator when offline
-        - Form works fully offline with localStorage
-      </details>
-    </step>
-    <step order="3">
-      <action>Update global styles</action>
-      <file>src/index.css</file>
-      <details>
-        - Reset/normalize CSS
-        - Set base font and colors
-        - Mobile-first responsive design
+        - Detect online/offline status using navigator.onLine
+        - Listen to online/offline events
+        - Return boolean online status
+        - Used to show MUI Chip indicator in App.tsx
       </details>
     </step>
   </phase>
@@ -204,9 +231,7 @@
     <directory name="src">
       <directory name="components">
         <file>InputForm.tsx</file>
-        <file>InputForm.css</file>
         <file>SubmissionsList.tsx</file>
-        <file>SubmissionsList.css</file>
       </directory>
       <directory name="services">
         <file>storage.ts</file>
@@ -215,10 +240,11 @@
         <file>useFormSubmit.ts</file>
         <file>useOnlineStatus.ts</file>
       </directory>
+      <directory name="theme">
+        <file>theme.ts</file>
+      </directory>
       <file>App.tsx</file>
-      <file>App.css</file>
       <file>main.tsx</file>
-      <file>index.css</file>
       <file>vite-env.d.ts</file>
     </directory>
     <directory name="public">
@@ -238,6 +264,11 @@
     <item>No API keys or credentials to manage</item>
     <item>Simple to deploy as static site</item>
     <item>Fast - no network latency for storage operations</item>
+    <item>Professional UI with Material-UI components</item>
+    <item>Simplified form handling with react-hook-form</item>
+    <item>Built-in form validation with minimal code</item>
+    <item>Responsive design out of the box with MUI Grid</item>
+    <item>Accessible UI components following WAI-ARIA standards</item>
   </benefits>
 
   <limitations>
