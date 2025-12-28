@@ -19,6 +19,7 @@ import WifiIcon from '@mui/icons-material/Wifi';
 import WifiOffIcon from '@mui/icons-material/WifiOff';
 import SendIcon from '@mui/icons-material/Send';
 import DownloadIcon from '@mui/icons-material/Download';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import InputForm from './components/InputForm';
 import SubmissionsList from './components/SubmissionsList';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
@@ -65,6 +66,7 @@ function App() {
   const [receivedFiles, setReceivedFiles] = useState<ReceivedFile[]>([]);
   const [transferProgress, setTransferProgress] = useState<number>(0);
   const [error, setError] = useState<string>('');
+  const [isServerDisconnected, setIsServerDisconnected] = useState(false);
 
   /**
    * Refs for PeerJS objects
@@ -125,6 +127,7 @@ function App() {
     peer.on('open', (id) => {
       setMyPeerId(id);
       setConnectionStatus('Ready');
+      setIsServerDisconnected(false);
     });
 
     /**
@@ -162,6 +165,21 @@ function App() {
     peer.on('error', (err) => {
       setError(`Peer error: ${err.message}`);
       setConnectionStatus('Error');
+    });
+
+    /**
+     * Event: 'disconnected'
+     *
+     * Fired when the peer is disconnected from the signaling server.
+     * Existing data connections remain active, but no new connections
+     * can be established until reconnected.
+     *
+     * Use peer.reconnect() to attempt reconnection with the same ID.
+     * The peer's connections property still contains active connections.
+     */
+    peer.on('disconnected', () => {
+      setIsServerDisconnected(true);
+      setConnectionStatus('Server Disconnected');
     });
 
     peerRef.current = peer;
@@ -345,6 +363,29 @@ function App() {
     URL.revokeObjectURL(url);
   };
 
+  /**
+   * Reconnect to PeerServer after disconnection
+   *
+   * peer.reconnect() attempts to reconnect to the signaling server
+   * using the same peer ID. This preserves existing data connections.
+   *
+   * Note: If peer.destroyed is true, reconnect() will fail.
+   * In that case, a new Peer instance must be created.
+   *
+   * @see https://peerjs.com/docs/#peerreconnect
+   */
+  const reconnectToServer = () => {
+    if (!peerRef.current) return;
+
+    if (peerRef.current.destroyed) {
+      setError('Peer was destroyed. Please refresh the page.');
+      return;
+    }
+
+    setConnectionStatus('Reconnecting...');
+    peerRef.current.reconnect();
+  };
+
   const handleSubmitSuccess = () => {
     setRefreshKey((prev) => prev + 1);
   };
@@ -378,7 +419,7 @@ function App() {
             </Alert>
           )}
 
-          <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
+          <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
             <TextField
               label="Your Peer ID"
               value={myPeerId}
@@ -389,9 +430,21 @@ function App() {
             <Chip
               label={connectionStatus}
               color={
-                connectionStatus.startsWith('Connected') ? 'success' : 'default'
+                connectionStatus.startsWith('Connected') ? 'success' :
+                isServerDisconnected ? 'error' : 'default'
               }
             />
+            {isServerDisconnected && (
+              <Button
+                variant="outlined"
+                color="warning"
+                size="small"
+                startIcon={<RefreshIcon />}
+                onClick={reconnectToServer}
+              >
+                Reconnect
+              </Button>
+            )}
           </Box>
 
           <Box
