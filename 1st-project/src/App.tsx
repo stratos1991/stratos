@@ -46,6 +46,40 @@ interface ReceivedFile {
   timestamp: number;
 }
 
+/** Message types for chunked file transfer */
+interface FileStartMessage {
+  type: 'file-start';
+  name: string;
+  fileType: string;
+  totalChunks: number;
+  totalSize: number;
+}
+
+interface FileChunkMessage {
+  type: 'file-chunk';
+  index: number;
+  data: ArrayBuffer;
+}
+
+interface FileEndMessage {
+  type: 'file-end';
+}
+
+type TransferMessage = FileStartMessage | FileChunkMessage | FileEndMessage;
+
+/** Tracks an incoming file transfer in progress */
+interface IncomingTransfer {
+  name: string;
+  fileType: string;
+  totalChunks: number;
+  totalSize: number;
+  chunks: ArrayBuffer[];
+  receivedCount: number;
+}
+
+/** Chunk size: 64KB for good balance between progress updates and efficiency */
+const CHUNK_SIZE = 64 * 1024;
+
 function App() {
   const [refreshKey, setRefreshKey] = useState(0);
   const isOnline = useOnlineStatus();
@@ -64,7 +98,9 @@ function App() {
     useState<string>('Disconnected');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [receivedFiles, setReceivedFiles] = useState<ReceivedFile[]>([]);
-  const [transferProgress, setTransferProgress] = useState<number>(0);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [downloadProgress, setDownloadProgress] = useState<number>(0);
+  const [transferStatus, setTransferStatus] = useState<string>('');
   const [error, setError] = useState<string>('');
   const [isServerDisconnected, setIsServerDisconnected] = useState(false);
 
@@ -81,6 +117,7 @@ function App() {
    */
   const peerRef = useRef<Peer | null>(null);
   const connectionRef = useRef<DataConnection | null>(null);
+  const incomingTransferRef = useRef<IncomingTransfer | null>(null);
 
   /**
    * Initialize PeerJS connection on component mount
@@ -106,13 +143,13 @@ function App() {
      * If no id is provided, PeerServer generates a unique brokering ID
      */
     const peer = new Peer({
-      host: window.location.hostname,
-      port:
-        import.meta.env.PROD && window.location.hostname !== 'localhost'
-          ? 443
-          : Number(window.location.port) || 80,
-      path: '/peerjs',
-      secure: window.location.protocol === 'https:',
+      // host: window.location.hostname,
+      // port:
+      //   import.meta.env.PROD && window.location.hostname !== 'localhost'
+      //     ? 443
+      //     : Number(window.location.port) || 80,
+      // path: '/peerjs',
+      // secure: window.location.protocol === 'https:',
     });
 
     /**
@@ -234,26 +271,51 @@ function App() {
      * Event: 'data'
      *
      * Fired when data is received from the remote peer.
-     * The data is automatically deserialized based on the
-     * connection's serialization format (default: BinaryPack).
-     *
-     * BinaryPack allows sending complex objects including ArrayBuffers,
-     * which is ideal for file transfer.
+     * Handles chunked file transfer protocol:
+     * 1. 'file-start': Initialize transfer with metadata
+     * 2. 'file-chunk': Receive and store each chunk, update progress
+     * 3. 'file-end': Assemble chunks into final file
      *
      * @param data - The received data, automatically deserialized
      */
     conn.on('data', (data: unknown) => {
-      const fileData = data as {
-        name: string;
-        type: string;
-        data: ArrayBuffer;
-      };
-      if (fileData.name && fileData.data) {
-        const blob = new Blob([fileData.data], { type: fileData.type });
+      const message = data as TransferMessage;
+
+      if (message.type === 'file-start') {
+        // Initialize incoming transfer
+        incomingTransferRef.current = {
+          name: message.name,
+          fileType: message.fileType,
+          totalChunks: message.totalChunks,
+          totalSize: message.totalSize,
+          chunks: new Array(message.totalChunks),
+          receivedCount: 0,
+        };
+        setDownloadProgress(0);
+        setTransferStatus(`Receiving: ${message.name}`);
+      } else if (message.type === 'file-chunk' && incomingTransferRef.current) {
+        // Store chunk and update progress
+        const transfer = incomingTransferRef.current;
+        transfer.chunks[message.index] = message.data;
+        transfer.receivedCount++;
+
+        const progress = Math.round(
+          (transfer.receivedCount / transfer.totalChunks) * 100
+        );
+        setDownloadProgress(progress);
+      } else if (message.type === 'file-end' && incomingTransferRef.current) {
+        // Assemble final file from chunks
+        const transfer = incomingTransferRef.current;
+        const blob = new Blob(transfer.chunks, { type: transfer.fileType });
+
         setReceivedFiles((prev) => [
           ...prev,
-          { name: fileData.name, data: blob, timestamp: Date.now() },
+          { name: transfer.name, data: blob, timestamp: Date.now() },
         ]);
+
+        incomingTransferRef.current = null;
+        setDownloadProgress(0);
+        setTransferStatus('');
       }
     });
 
@@ -306,22 +368,17 @@ function App() {
   };
 
   /**
-   * Send a file to the connected peer
+   * Send a file to the connected peer using chunked transfer
    *
-   * dataConnection.send(data) transmits data to the remote peer.
+   * Implements a chunked file transfer protocol:
+   * 1. Send 'file-start' with metadata (name, type, total chunks)
+   * 2. Send each chunk with index for ordered reassembly
+   * 3. Send 'file-end' to signal completion
    *
-   * With default BinaryPack serialization, you can send:
-   * - Strings, numbers, booleans, null
-   * - Objects and arrays (will be serialized)
-   * - ArrayBuffer, TypedArrays, Blob, File
-   *
-   * For file transfer, we convert File to ArrayBuffer because:
-   * 1. ArrayBuffer is more universally supported
-   * 2. Allows progress tracking on the sender side
-   * 3. Easier to reconstruct as Blob on receiver
-   *
-   * Note: Large files may need chunking for reliability.
-   * PeerJS handles chunking internally for data > 16KB.
+   * Benefits of chunking:
+   * - Real progress tracking for both sender and receiver
+   * - Better handling of large files
+   * - Allows for future features like pause/resume
    *
    * @see https://peerjs.com/docs/#dataconnection-send
    */
@@ -331,20 +388,55 @@ function App() {
       return;
     }
 
-    setTransferProgress(10);
-    // Convert File to ArrayBuffer for transmission
-    const arrayBuffer = await selectedFile.arrayBuffer();
-    setTransferProgress(50);
+    const conn = connectionRef.current;
+    const file = selectedFile;
 
-    // Send file metadata along with data for reconstruction on receiver
-    connectionRef.current.send({
-      name: selectedFile.name,
-      type: selectedFile.type,
-      data: arrayBuffer,
-    });
+    // Convert file to ArrayBuffer
+    const arrayBuffer = await file.arrayBuffer();
+    const totalChunks = Math.ceil(arrayBuffer.byteLength / CHUNK_SIZE);
 
-    setTransferProgress(100);
-    setTimeout(() => setTransferProgress(0), 1000);
+    setUploadProgress(0);
+    setTransferStatus(`Sending: ${file.name}`);
+
+    // Send file-start message with metadata
+    conn.send({
+      type: 'file-start',
+      name: file.name,
+      fileType: file.type,
+      totalChunks,
+      totalSize: arrayBuffer.byteLength,
+    } as FileStartMessage);
+
+    // Send chunks with progress updates
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * CHUNK_SIZE;
+      const end = Math.min(start + CHUNK_SIZE, arrayBuffer.byteLength);
+      const chunk = arrayBuffer.slice(start, end);
+
+      conn.send({
+        type: 'file-chunk',
+        index: i,
+        data: chunk,
+      } as FileChunkMessage);
+
+      // Update progress after each chunk
+      const progress = Math.round(((i + 1) / totalChunks) * 100);
+      setUploadProgress(progress);
+
+      // Small delay to prevent overwhelming the connection
+      if (i < totalChunks - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+    }
+
+    // Send file-end message
+    conn.send({ type: 'file-end' } as FileEndMessage);
+
+    // Reset state after short delay to show 100%
+    setTimeout(() => {
+      setUploadProgress(0);
+      setTransferStatus('');
+    }, 1000);
     setSelectedFile(null);
   };
 
@@ -419,7 +511,15 @@ function App() {
             </Alert>
           )}
 
-          <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+          <Box
+            sx={{
+              display: 'flex',
+              gap: 2,
+              mb: 2,
+              flexWrap: 'wrap',
+              alignItems: 'center',
+            }}
+          >
             <TextField
               label="Your Peer ID"
               value={myPeerId}
@@ -430,8 +530,11 @@ function App() {
             <Chip
               label={connectionStatus}
               color={
-                connectionStatus.startsWith('Connected') ? 'success' :
-                isServerDisconnected ? 'error' : 'default'
+                connectionStatus.startsWith('Connected')
+                  ? 'success'
+                  : isServerDisconnected
+                  ? 'error'
+                  : 'default'
               }
             />
             {isServerDisconnected && (
@@ -503,12 +606,54 @@ function App() {
             </Button>
           </Box>
 
-          {transferProgress > 0 && (
-            <LinearProgress
-              variant="determinate"
-              value={transferProgress}
-              sx={{ mb: 2 }}
-            />
+          {/* Upload Progress */}
+          {uploadProgress > 0 && (
+            <Box sx={{ mb: 2 }}>
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  mb: 0.5,
+                }}
+              >
+                <Typography variant="body2" color="primary">
+                  Uploading: {transferStatus.replace('Sending: ', '')}
+                </Typography>
+                <Typography variant="body2" color="primary">
+                  {uploadProgress}%
+                </Typography>
+              </Box>
+              <LinearProgress
+                variant="determinate"
+                value={uploadProgress}
+                color="primary"
+              />
+            </Box>
+          )}
+
+          {/* Download Progress */}
+          {downloadProgress > 0 && (
+            <Box sx={{ mb: 2 }}>
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  mb: 0.5,
+                }}
+              >
+                <Typography variant="body2" color="secondary">
+                  Downloading: {transferStatus.replace('Receiving: ', '')}
+                </Typography>
+                <Typography variant="body2" color="secondary">
+                  {downloadProgress}%
+                </Typography>
+              </Box>
+              <LinearProgress
+                variant="determinate"
+                value={downloadProgress}
+                color="secondary"
+              />
+            </Box>
           )}
 
           {receivedFiles.length > 0 && (
