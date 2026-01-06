@@ -22,6 +22,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import InputForm from './components/InputForm';
 import SubmissionsList from './components/SubmissionsList';
+import ManualLocalhostP2PFileTransfer from './components/ManualLocalhostP2PFileTransfer';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 /**
  * PeerJS - Simple peer-to-peer with WebRTC
@@ -38,7 +39,12 @@ import { useOnlineStatus } from './hooks/useOnlineStatus';
  * @see https://github.com/peers/peerjs - GitHub Repository
  */
 import Peer, { DataConnection } from 'peerjs';
-
+enum LogLevel {
+  None = 0,
+  Error = 1,
+  Warning = 2,
+  All = 3,
+}
 /** Represents a file received via P2P connection */
 interface ReceivedFile {
   name: string;
@@ -143,6 +149,14 @@ function App() {
      * If no id is provided, PeerServer generates a unique brokering ID
      */
     const peer = new Peer({
+      debug: LogLevel.All as number,
+      logFunction: (level, message, rest) => {
+        console.log(
+          `[PeerJS][${LogLevel[level]}]: ${message} Rest:`,
+          rest ? rest : 'none'
+        );
+      },
+      // key: 'peerjs', // Using our own PeerServer, so no API key needed
       // host: window.location.hostname,
       // port:
       //   import.meta.env.PROD && window.location.hostname !== 'localhost'
@@ -455,6 +469,13 @@ function App() {
     URL.revokeObjectURL(url);
   };
 
+  const disconnectFromServer = () => {
+    if (!peerRef.current) return;
+
+    peerRef.current.disconnect();
+    // setConnectionStatus('Disconnected from Server');
+  };
+
   /**
    * Reconnect to PeerServer after disconnection
    *
@@ -482,6 +503,7 @@ function App() {
     setRefreshKey((prev) => prev + 1);
   };
 
+  console.log(peerRef.current?.connections);
   return (
     <>
       <AppBar position="static">
@@ -548,6 +570,15 @@ function App() {
                 Reconnect
               </Button>
             )}
+            <Button
+              variant="outlined"
+              color="warning"
+              size="small"
+              startIcon={<RefreshIcon />}
+              onClick={disconnectFromServer}
+            >
+              Disconnect
+            </Button>
           </Box>
 
           <Box
@@ -682,6 +713,9 @@ function App() {
             </>
           )}
         </Paper>
+
+        {/* Manual LAN P2P File Transfer (No Server) */}
+        <ManualLocalhostP2PFileTransfer />
 
         <Box sx={{ mb: 4 }}>
           <Typography variant="h4" component="h1" gutterBottom>
