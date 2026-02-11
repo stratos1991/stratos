@@ -1,5 +1,6 @@
 // src/server.ts
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import express, { Request, Response, NextFunction } from 'express';
@@ -59,13 +60,15 @@ app.post('/api/claude', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Prompt is required' });
     }
 
+    const storageDir = path.join(process.cwd(), 'storage');
+    fs.mkdirSync(storageDir, { recursive: true });
     // Merge options with defaults
     const nodeBin = process.execPath; // absolute path to running node binary
     const claudeCli =
       '/var/www/vhosts/stratostsitouras.gr/claude-code-rhel8/claude-code/cli.js';
 
     const queryOptions = {
-      cwd: process.cwd(),
+      cwd: storageDir,
       pathToClaudeCodeExecutable: claudeCli,
       executable: 'node' as const,
       env: {
@@ -73,7 +76,18 @@ app.post('/api/claude', async (req: Request, res: Response) => {
         PATH: `${path.dirname(nodeBin)}:${process.env.PATH}`,
       },
       // Custom spawn to work around ENOENT in containers (CloudLinux, Docker, etc.)
-      spawnClaudeCodeProcess: ({ args, cwd, env, signal }: { command: string; args: string[]; cwd?: string; env: Record<string, string | undefined>; signal: AbortSignal }) => {
+      spawnClaudeCodeProcess: ({
+        args,
+        cwd,
+        env,
+        signal,
+      }: {
+        command: string;
+        args: string[];
+        cwd?: string;
+        env: Record<string, string | undefined>;
+        signal: AbortSignal;
+      }) => {
         return spawn(nodeBin, [claudeCli, ...args], {
           cwd,
           env: { ...env, PATH: `${path.dirname(nodeBin)}:${env.PATH || ''}` },
@@ -120,6 +134,20 @@ app.post('/api/claude', async (req: Request, res: Response) => {
       details: error instanceof Error ? error.message : 'Unknown error',
     });
   }
+});
+
+// Save text to storage
+app.post('/api/storage', (req: Request, res: Response) => {
+  const { content } = req.body;
+  if (!content) {
+    return res.status(400).json({ error: 'Content is required' });
+  }
+  const storageDir = path.join(process.cwd(), 'storage');
+  fs.mkdirSync(storageDir, { recursive: true });
+  const filePath = path.join(storageDir, 'db.txt');
+  const entry = `[${new Date().toISOString()}] ${content}\n\n`;
+  fs.appendFileSync(filePath, entry, 'utf-8');
+  res.json({ ok: true, path: filePath });
 });
 
 // Terminal SSE + POST routes (must be after auth middleware)

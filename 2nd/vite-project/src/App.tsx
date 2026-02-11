@@ -1,15 +1,16 @@
 import { useRef, useState, useEffect, type FormEvent } from "react";
 import { useTerminal } from "./hooks/useTerminal";
 import { Chat } from "./components/Chat";
+import { Input } from "./components/Input";
 import "./index.css";
 
-type View = "terminal" | "chat";
+type View = "terminal" | "chat" | "input";
 
 function App() {
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [activeView, setActiveView] = useState<View>("chat");
+  const [activeView, setActiveView] = useState<View>("input");
   const containerRef = useRef<HTMLDivElement>(null);
   const { status, connect, disconnect } = useTerminal(containerRef);
 
@@ -88,38 +89,25 @@ function App() {
         }}
       >
         {/* Tabs */}
-        <button
-          onClick={() => setActiveView("chat")}
-          style={{
-            padding: "10px 20px",
-            background: activeView === "chat" ? "#1e293b" : "transparent",
-            color: activeView === "chat" ? "#60a5fa" : "#94a3b8",
-            border: "none",
-            borderBottom: activeView === "chat" ? "2px solid #3b82f6" : "2px solid transparent",
-            cursor: "pointer",
-            fontSize: 13,
-            fontFamily: "monospace",
-            fontWeight: activeView === "chat" ? "bold" : "normal",
-          }}
-        >
-          💬 Chat
-        </button>
-        <button
-          onClick={() => setActiveView("terminal")}
-          style={{
-            padding: "10px 20px",
-            background: activeView === "terminal" ? "#1e293b" : "transparent",
-            color: activeView === "terminal" ? "#60a5fa" : "#94a3b8",
-            border: "none",
-            borderBottom: activeView === "terminal" ? "2px solid #3b82f6" : "2px solid transparent",
-            cursor: "pointer",
-            fontSize: 13,
-            fontFamily: "monospace",
-            fontWeight: activeView === "terminal" ? "bold" : "normal",
-          }}
-        >
-          🖥️ Terminal
-        </button>
+        {(["input", "chat", "terminal"] as const).map((view) => (
+          <button
+            key={view}
+            onClick={() => setActiveView(view)}
+            style={{
+              padding: "10px 20px",
+              background: activeView === view ? "#1e293b" : "transparent",
+              color: activeView === view ? "#60a5fa" : "#94a3b8",
+              border: "none",
+              borderBottom: activeView === view ? "2px solid #3b82f6" : "2px solid transparent",
+              cursor: "pointer",
+              fontSize: 13,
+              fontFamily: "monospace",
+              fontWeight: activeView === view ? "bold" : "normal",
+            }}
+          >
+            {{ input: "📝 Input", chat: "💬 Chat", terminal: "🖥️ Terminal" }[view]}
+          </button>
+        ))}
 
         <div style={{ flex: 1 }} />
 
@@ -151,7 +139,9 @@ function App() {
 
       {/* Content area */}
       <div style={{ flex: 1, overflow: "hidden" }}>
-        {activeView === "chat" ? (
+        {activeView === "input" ? (
+          <Input />
+        ) : activeView === "chat" ? (
           <Chat />
         ) : (
           <div ref={containerRef} style={{ height: "100%" }} />

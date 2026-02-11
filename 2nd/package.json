@@ -7,7 +7,7 @@
     "type-check": "tsc --noEmit",
     "build": "npm run type-check && npm run build:client && node build.js",
     "build:client": "npm run build --prefix vite-project",
-    "start": "node dist/bundle.js",
+    "start": "node dist/server.js",
     "dev": "tsx watch src/server.ts",
     "deploy": "./build-deploy.sh"
   },
