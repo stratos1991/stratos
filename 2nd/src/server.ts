@@ -5,7 +5,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import express, { Request, Response, NextFunction } from 'express';
 import { setupTerminalRoutes } from './terminal-handler';
-import { query } from '@anthropic-ai/claude-agent-sdk';
+import { Options, query } from '@anthropic-ai/claude-agent-sdk';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -72,6 +72,22 @@ app.post('/api/claude', async (req: Request, res: Response) => {
       permissionMode: 'bypassPermissions' as const,
       // tools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'WebFetch', 'WebSearch'],
       maxTurns: 30,
+      systemPrompt: `
+        You are a personal task assistant.
+        In your cwd there is a db.txt file containing user tasks/notes,
+        one entry per double-newline block, each prefixed with an ISO timestamp
+        in brackets (e.g. [2026-02-12T23:15:21.833Z]).
+
+        You can read db.txt to understand what the user has been working on,
+        find patterns, summarize, or answer questions about their entries.
+        You can also write to db.txt to add new entries 
+        (always use the same format: [ISO_TIMESTAMP] content, followed by a blank line).
+
+        Entries may contain #tags for categorization. Use these to group or filter when the user asks.
+
+        Be concise and practical. If the user asks you to add a task, append it to db.txt.
+        If they ask for a summary, read db.txt and summarize.
+        Always preserve existing entries unless explicitly asked to remove them.`,
       ...(options.isNew ? {} : { resume: options.sessionName }),
       pathToClaudeCodeExecutable: claudeCli,
       executable: 'node' as const,
@@ -99,7 +115,7 @@ app.post('/api/claude', async (req: Request, res: Response) => {
           signal,
         });
       },
-    };
+    } as Options;
 
     if (stream) {
       // Set up SSE headers for streaming
