@@ -9,9 +9,7 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 
 const app = express();
 const port = process.env.PORT || 3000;
-const PASSWORD =
-  process.env.LOGIN_PASSWORD ||
-  'f29fanfemfawfj02rjawefij209r239rj2tjawpifja4tj[409jtw';
+const PASSWORD = process.env.LOGIN_PASSWORD || 'a';
 
 // In-memory token store
 const validTokens = new Set<string>();
@@ -61,14 +59,20 @@ app.post('/api/claude', async (req: Request, res: Response) => {
     }
 
     const storageDir = path.join(process.cwd(), 'storage');
-    fs.mkdirSync(storageDir, { recursive: true });
-    // Merge options with defaults
-    const nodeBin = process.execPath; // absolute path to running node binary
+    await fs.promises.mkdir(storageDir, { recursive: true });
+
+    const nodeBin = process.execPath;
     const claudeCli =
       '/var/www/vhosts/stratostsitouras.gr/claude-code-rhel8/claude-code/cli.js';
 
     const queryOptions = {
+      model: 'sonnet' as const,
       cwd: storageDir,
+      allowDangerouslySkipPermissions: true,
+      permissionMode: 'bypassPermissions' as const,
+      // tools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'WebFetch', 'WebSearch'],
+      maxTurns: 30,
+      ...(options.isNew ? {} : { resume: options.sessionName }),
       pathToClaudeCodeExecutable: claudeCli,
       executable: 'node' as const,
       env: {
@@ -95,9 +99,8 @@ app.post('/api/claude', async (req: Request, res: Response) => {
           signal,
         });
       },
-      ...options,
     };
-    console.log({ __dirname, __filename, p: process.cwd() });
+
     if (stream) {
       // Set up SSE headers for streaming
       res.setHeader('Content-Type', 'text/event-stream');
@@ -107,7 +110,7 @@ app.post('/api/claude', async (req: Request, res: Response) => {
       try {
         for await (const message of query({
           prompt,
-          options: { ...queryOptions },
+          options: queryOptions,
         })) {
           res.write(`data: ${JSON.stringify(message)}\n\n`);
         }
@@ -121,19 +124,51 @@ app.post('/api/claude', async (req: Request, res: Response) => {
       }
     } else {
       // Non-streaming response - collect all messages
-      const messages = [];
+      let response = '';
+      let sessionId = '';
+      let totalCostUSD = '';
       for await (const message of query({ prompt, options: queryOptions })) {
-        messages.push(message);
+        if (message.session_id) {
+          sessionId = message.session_id;
+        }
+        if (message.type === 'assistant') {
+          const content = message.message.content;
+          if (Array.isArray(content)) {
+            for (const block of content) {
+              if (block.type === 'text') {
+                response += block.text;
+              }
+            }
+          }
+        } else if (message.type === 'result' && message.subtype === 'success') {
+          if (message.result) {
+            response = message.result;
+            totalCostUSD = parseFloat(
+              message.total_cost_usd as unknown as string,
+            ).toFixed(6);
+          }
+          break;
+        } else if (message.type === 'result' && message.is_error) {
+          throw new Error('Claude query failed');
+        }
       }
-      res.json({ messages });
+      res.json({ response, sessionId, totalCostUSD });
     }
   } catch (error) {
     console.error('Claude API error:', error);
-    res.status(500).json({
-      error: 'Failed to process Claude request',
-      details: error instanceof Error ? error.message : 'Unknown error',
-    });
+    res.status(500).json({ error: 'Internal server error' });
   }
+});
+
+// Read entries from storage
+app.get('/api/storage', (_req: Request, res: Response) => {
+  const filePath = path.join(process.cwd(), 'storage', 'db.txt');
+  if (!fs.existsSync(filePath)) {
+    return res.json({ entries: [] });
+  }
+  const raw = fs.readFileSync(filePath, 'utf-8');
+  const entries = raw.split('\n\n').filter((e) => e.trim());
+  res.json({ entries });
 });
 
 // Save text to storage
@@ -147,11 +182,41 @@ app.post('/api/storage', (req: Request, res: Response) => {
   const filePath = path.join(storageDir, 'db.txt');
   const entry = `[${new Date().toISOString()}] ${content}\n\n`;
   fs.appendFileSync(filePath, entry, 'utf-8');
-  res.json({ ok: true, path: filePath });
+  res.json({ ok: true, content: entry });
+});
+
+// Delete entry from storage by content match
+app.delete('/api/storage', (req: Request, res: Response) => {
+  const { entry } = req.body;
+  if (!entry) {
+    return res.status(400).json({ error: 'Entry content is required' });
+  }
+  const filePath = path.join(process.cwd(), 'storage', 'db.txt');
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'No entries found' });
+  }
+  const raw = fs.readFileSync(filePath, 'utf-8');
+  const entries = raw.split('\n\n').filter((e) => e.trim());
+  const index = entries.findIndex((e) => e.trim() === entry.trim());
+  if (index === -1) {
+    return res.status(404).json({ error: 'Entry not found' });
+  }
+  entries.splice(index, 1);
+  const updated = entries.length > 0 ? entries.join('\n\n') + '\n\n' : '';
+  fs.writeFileSync(filePath, updated, 'utf-8');
+  res.json({ ok: true, entries });
 });
 
 // Terminal SSE + POST routes (must be after auth middleware)
 setupTerminalRoutes(app, validTokens);
+
+app.get('/api/aigenerated', (_req: Request, res: Response) => {
+  const filePath = path.join(process.cwd(), 'storage', 'aigenerated.html');
+  if (!fs.existsSync(filePath)) {
+    return res.json({ error: 'no aigenerated.html file found' });
+  }
+  res.sendFile(filePath);
+});
 
 // Serve Vite build output (co-located in dist/)
 app.use(express.static(__dirname));

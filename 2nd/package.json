@@ -9,7 +9,7 @@
     "build:client": "npm run build --prefix vite-project",
     "start": "node dist/server.js",
     "dev": "tsx watch src/server.ts",
-    "deploy": "./build-deploy.sh"
+    "deploy": "rm -rf dist && ./build-deploy.sh"
   },
   "keywords": [],
   "author": "",
